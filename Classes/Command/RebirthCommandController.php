@@ -10,6 +10,7 @@ namespace PunktDe\Rebirth\Command;
 use Closure;
 use Doctrine\Common\Collections\ArrayCollection;
 use PunktDe\Rebirth\Service\OrphanNodeService;
+use Neos\ContentRepository\Domain\Repository\WorkspaceRepository;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Cli\CommandController;
 use Neos\Neos\Controller\Exception\NodeNotFoundException;
@@ -22,6 +23,12 @@ class RebirthCommandController extends CommandController
      * @Flow\Inject
      */
     protected $orphanNodeService;
+
+    /**
+     * @var WorkspaceRepository
+     * @Flow\Inject
+     */
+    protected $workspaceRepository;
 
     /**
      * List orphan documents
@@ -52,6 +59,24 @@ class RebirthCommandController extends CommandController
     }
 
     /**
+     * List orphan documents for all user workspaces
+     *
+     * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
+     * @param string $type The supertype of the nods to search
+     */
+    public function listAllUserWorkspacesCommand(?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
+    {
+        $userWorkspaceNames = $this->getAllUserWorkspaceNames();
+
+        if (!empty($userWorkspaceNames)) {
+            foreach ($userWorkspaceNames as $userWorkspaceName) {
+                $this->outputLine('<b>Workspace:</b> %s', [$userWorkspaceName]);
+                $this->listCommand($userWorkspaceName, $dimensions, $type);
+            }
+        }
+    }
+
+    /**
      * Prune orphan documents
      *
      * @param string $workspace The workspace to use
@@ -65,6 +90,24 @@ class RebirthCommandController extends CommandController
             $node->remove();
             $this->outputLine('  <info>Done, node removed</info>');
         }, $workspace, $dimensions, $type, false);
+    }
+
+    /**
+     * Prune orphan documents
+     *
+     * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
+     * @param string $type The supertype of the nods to search
+     */
+    public function pruneAllUserWorkspacesCommand(?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
+    {
+        $userWorkspaceNames = $this->getAllUserWorkspaceNames();
+
+        if (!empty($userWorkspaceNames)) {
+            foreach ($userWorkspaceNames as $userWorkspaceName) {
+                $this->outputLine('<b>Workspace:</b> %s', [$userWorkspaceName]);
+                $this->pruneAllCommand($userWorkspaceName, $dimensions, $type);
+            }
+        }
     }
 
     /**
@@ -112,7 +155,11 @@ class RebirthCommandController extends CommandController
     protected function command(Closure $func, string $workspace, ?string $dimensions, string $type, bool $restore = false, string $targetIdentifier = null): void
     {
         $nodes = $this->orphanNodeService->listOrphanNodes($workspace, $dimensions, $type);
-        $nodes->map(function (NodeInterface $node) use ($func, $restore, $targetIdentifier) {
+        $nodes->map(function ($node) use ($func, $restore, $targetIdentifier) {
+            if (!$node instanceof NodeInterface) {
+                return;
+            }
+
             $func($node, $restore, $targetIdentifier);
         });
 
@@ -125,7 +172,14 @@ class RebirthCommandController extends CommandController
 
     protected function convertNodesToNodeInfo(ArrayCollection $nodes): array
     {
-        return array_map([$this, 'convertNodeToNodeInfo'], $nodes->toArray());
+        //filter out null values from $nodes array collection as nodedata can be internal
+        //see Packages/Application/Neos.ContentRepository/Classes/Domain/Factory/NodeFactory.php createFromNodeData
+        $nodeArray = array_values(array_filter(
+            $nodes->toArray(),
+            static fn($node): bool => $node instanceof NodeInterface
+        ));
+
+        return array_map([$this, 'convertNodeToNodeInfo'], $nodeArray);
     }
 
     protected function convertNodeToNodeInfo(NodeInterface $node): array
@@ -138,5 +192,25 @@ class RebirthCommandController extends CommandController
             'label' => $node->getLabel(),
             'path' => $node->getPath(),
         ];
+    }
+
+    protected function getAllUserWorkspaceNames(): array
+    {
+        $workspaceNames = array_map(
+            static fn($workspace): string => $workspace->getName(),
+            $this->workspaceRepository->findAll()->toArray()
+        );
+
+        $filteredWorkspaceNames = array_values(array_filter(
+            $workspaceNames,
+            static fn(string $workspaceName): bool => str_starts_with($workspaceName, 'user-')
+        ));
+
+        if (empty($filteredWorkspaceNames)) {
+            $this->outputLine('<b>No user workspaces found</b>');
+            return [];
+        }
+
+        return $filteredWorkspaceNames;
     }
 }
