@@ -79,16 +79,23 @@ class OrphanNodeService
      */
     public function listOrphanNodes(string $workspaceName, ?string $dimensions = null, $type = 'Neos.Neos:Document'): ArrayCollection
     {
-        $nodes = $this->findOrphanNodes($workspaceName, $dimensions);
+        $allOrphanedNodeData = $this->findOrphanNodes($workspaceName, $dimensions);
 
-        $nodes = $nodes->filter(function (NodeData $nodeData) use ($type) {
+        $orphanedNodeDataOfSpecificType = $allOrphanedNodeData->filter(function (NodeData $nodeData) use ($type) {
             return $nodeData->getNodeType()->isOfType($type);
         });
 
-        return $nodes->map(function (NodeData $nodeData) {
+        $nodes = $orphanedNodeDataOfSpecificType->map(function (NodeData $nodeData) {
             $context = $this->createContextMatchingNodeData($nodeData);
             return $this->nodeFactory->createFromNodeData($nodeData, $context);
         });
+
+        //filter out null values from $nodes array collection as nodedata can be internal
+        //see Packages/Application/Neos.ContentRepository/Classes/Domain/Factory/NodeFactory.php createFromNodeData
+        return new ArrayCollection(array_values(array_filter(
+            $nodes->toArray(),
+            fn($node): bool => $node instanceof NodeInterface
+        )));
     }
 
     /**

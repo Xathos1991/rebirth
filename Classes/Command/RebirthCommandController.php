@@ -155,11 +155,7 @@ class RebirthCommandController extends CommandController
     protected function command(Closure $func, string $workspace, ?string $dimensions, string $type, bool $restore = false, string $targetIdentifier = null): void
     {
         $nodes = $this->orphanNodeService->listOrphanNodes($workspace, $dimensions, $type);
-        $nodes->map(function ($node) use ($func, $restore, $targetIdentifier) {
-            if (!$node instanceof NodeInterface) {
-                return;
-            }
-
+        $nodes->map(function (NodeInterface $node) use ($func, $restore, $targetIdentifier) {
             $func($node, $restore, $targetIdentifier);
         });
 
@@ -172,14 +168,7 @@ class RebirthCommandController extends CommandController
 
     protected function convertNodesToNodeInfo(ArrayCollection $nodes): array
     {
-        //filter out null values from $nodes array collection as nodedata can be internal
-        //see Packages/Application/Neos.ContentRepository/Classes/Domain/Factory/NodeFactory.php createFromNodeData
-        $nodeArray = array_values(array_filter(
-            $nodes->toArray(),
-            static fn($node): bool => $node instanceof NodeInterface
-        ));
-
-        return array_map([$this, 'convertNodeToNodeInfo'], $nodeArray);
+        return array_map([$this, 'convertNodeToNodeInfo'], $nodes->toArray());
     }
 
     protected function convertNodeToNodeInfo(NodeInterface $node): array
@@ -196,14 +185,12 @@ class RebirthCommandController extends CommandController
 
     protected function getAllUserWorkspaceNames(): array
     {
-        $workspaceNames = array_map(
-            static fn($workspace): string => $workspace->getName(),
-            $this->workspaceRepository->findAll()->toArray()
-        );
-
         $filteredWorkspaceNames = array_values(array_filter(
-            $workspaceNames,
-            static fn(string $workspaceName): bool => str_starts_with($workspaceName, 'user-')
+            array_map(
+                fn($workspace): string => $workspace->getName(),
+                $this->workspaceRepository->findAll()->toArray()
+            ),
+            fn(string $workspaceName): bool => str_starts_with($workspaceName, 'user-')
         ));
 
         if (empty($filteredWorkspaceNames)) {
