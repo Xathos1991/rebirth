@@ -9,6 +9,11 @@ namespace PunktDe\Rebirth\Command;
 
 use Closure;
 use Doctrine\Common\Collections\ArrayCollection;
+use JsonException;
+use Neos\ContentRepository\Domain\Model\NodeData;
+use Neos\ContentRepository\Domain\Repository\NodeDataRepository;
+use Neos\ContentRepository\Exception\NodeException;
+use Neos\ContentRepository\Exception\NodeTypeNotFoundException;
 use PunktDe\Rebirth\Service\OrphanNodeService;
 use Neos\ContentRepository\Domain\Repository\WorkspaceRepository;
 use Neos\Flow\Annotations as Flow;
@@ -31,6 +36,12 @@ class RebirthCommandController extends CommandController
     protected $workspaceRepository;
 
     /**
+     * @var NodeDataRepository
+     * @Flow\Inject
+     */
+    protected $nodeDataRepository;
+
+    /**
      * List orphan documents
      *
      * @param string $workspace The workspace to use
@@ -40,7 +51,15 @@ class RebirthCommandController extends CommandController
     public function listCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
     {
         $nodes = $this->orphanNodeService->listOrphanNodes($workspace, $dimensions, $type);
+        $orphanNodeData = $this->orphanNodeService->listOrphanNodeData($workspace, $dimensions, $type);
 
+        $this->listOrphanNodes($nodes);
+        $this->listOrphanNodesData($orphanNodeData);
+        $this->outputLine('');
+    }
+
+    protected function listOrphanNodes(ArrayCollection $nodes): void
+    {
         $this->output->outputTable(
             array_map(static function (array $nodeInfo) {
                 $nodeInfo['info'] = sprintf('Label: %s%sPath: %s' . PHP_EOL, $nodeInfo['label'], PHP_EOL, $nodeInfo['path']);
@@ -55,6 +74,25 @@ class RebirthCommandController extends CommandController
             $this->outputLine('<b>Found nodes:</b> %d', [count($nodes)]);
         } else {
             $this->outputLine('<b>No orphaned document nodes</b>');
+        }
+    }
+
+    protected function listOrphanNodesData(ArrayCollection $nodesData): void
+    {
+        $this->output->outputTable(
+            array_map(static function (array $nodeInfo) {
+                $nodeInfo['info'] = sprintf('Label: %s%sPath: %s' . PHP_EOL, $nodeInfo['label'], PHP_EOL, $nodeInfo['path']);
+                $nodeInfo['dimension'] = str_replace(',', PHP_EOL, $nodeInfo['dimension']);
+                unset($nodeInfo['label'], $nodeInfo['path']);
+                return $nodeInfo;
+            }, $this->convertNodesDataToNodeInfo($nodesData)),
+            ['Site', 'Dimension', 'Identifier', 'Node Type', 'Info']
+        );
+
+        if (count($nodesData)) {
+            $this->outputLine('<b>Found internal nodes:</b> %d', [count($nodesData)]);
+        } else {
+            $this->outputLine('<b>No orphaned internal document nodes</b>');
         }
     }
 
@@ -85,11 +123,17 @@ class RebirthCommandController extends CommandController
      */
     public function pruneAllCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
     {
+        $orphanNodeData = $this->orphanNodeService->listOrphanNodeData($workspace, $dimensions, $type);
+
         $this->command(function (NodeInterface $node) {
             $this->output->outputLine('%s <comment>%s</comment> (%s) in <b>%s</b>', [$node->getIdentifier(), $node->getLabel(), $node->getNodeType(), $node->getPath()]);
             $node->remove();
             $this->outputLine('  <info>Done, node removed</info>');
         }, $workspace, $dimensions, $type, false);
+
+        $this->removeOrphanNodeData($orphanNodeData);
+
+        $this->outputLine('');
     }
 
     /**
@@ -107,6 +151,22 @@ class RebirthCommandController extends CommandController
                 $this->outputLine('<b>Workspace:</b> %s', [$userWorkspaceName]);
                 $this->pruneAllCommand($userWorkspaceName, $dimensions, $type);
             }
+        }
+    }
+
+    protected function removeOrphanNodeData(ArrayCollection $nodesData): void
+    {
+        /** @var NodeData $nodeData */
+        foreach ($nodesData as $nodeData) {
+            $this->output->outputLine('%s <comment>%s</comment> (%s) in <b>%s</b>', [$nodeData->getIdentifier(), (string)($nodeData->getProperty('title') ?? ''), $nodeData->getNodeType(), $nodeData->getPath()]);
+            $this->nodeDataRepository->remove($nodeData);
+            $this->outputLine('  <info>Done, node data removed</info>');
+        }
+
+        if ($nodesData->count()) {
+            $this->outputLine('<b>Processed nodes data:</b> %d', [$nodesData->count()]);
+        } else {
+            $this->outputLine('<b>No orphaned document node data</b>');
         }
     }
 
@@ -171,6 +231,11 @@ class RebirthCommandController extends CommandController
         return array_map([$this, 'convertNodeToNodeInfo'], $nodes->toArray());
     }
 
+    protected function convertNodesDataToNodeInfo(ArrayCollection $nodesData): array
+    {
+        return array_map([$this, 'convertNodeDataToNodeInfo'], $nodesData->toArray());
+    }
+
     protected function convertNodeToNodeInfo(NodeInterface $node): array
     {
         return [
@@ -180,6 +245,24 @@ class RebirthCommandController extends CommandController
             'nodeType' => $node->getNodeType(),
             'label' => $node->getLabel(),
             'path' => $node->getPath(),
+        ];
+    }
+
+    protected function convertNodeDataToNodeInfo(NodeData $nodeData): array
+    {
+        $siteName = '-';
+        $pathSegments = explode('/', trim($nodeData->getPath(), '/'));
+        if (($pathSegments[0] ?? null) === 'sites' && isset($pathSegments[1])) {
+            $siteName = $pathSegments[1];
+        }
+
+        return [
+            'site' => $siteName,
+            'dimension' => str_replace(['{', '}', '[', ']', '"'], '', json_encode($nodeData->getDimensionValues(), JSON_THROW_ON_ERROR)),
+            'identifier' => $nodeData->getIdentifier(),
+            'nodeType' => $nodeData->getNodeType(),
+            'label' => (string)($nodeData->getProperty('title') ?? ''),
+            'path' => $nodeData->getPath(),
         ];
     }
 
