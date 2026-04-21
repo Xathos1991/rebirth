@@ -104,7 +104,7 @@ class OrphanNodeService
      * @param string $type
      * @return ArrayCollection
      */
-    public function listOrphanNodeData(string $workspaceName, ?string $dimensions = null, $type = 'Neos.Neos:Document'): ArrayCollection
+    public function listInternalOrphanedNodeData(string $workspaceName, ?string $dimensions = null, $type = 'Neos.Neos:Document'): ArrayCollection
     {
         $allOrphanedNodeData = $this->findOrphanNodes($workspaceName, $dimensions);
 
@@ -116,7 +116,7 @@ class OrphanNodeService
             $context = $this->createContextMatchingNodeData($nodeData);
             $node = $this->nodeFactory->createFromNodeData($nodeData, $context);
 
-            return !$node instanceof NodeInterface;
+            return $node->isInternal();
         });
 
         return new ArrayCollection(array_values($orphanedNodeDataWithoutNodeInterface->toArray()));

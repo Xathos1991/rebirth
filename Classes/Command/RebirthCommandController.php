@@ -123,7 +123,7 @@ class RebirthCommandController extends CommandController
      */
     public function pruneAllCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
     {
-        $orphanNodeData = $this->orphanNodeService->listOrphanNodeData($workspace, $dimensions, $type);
+        $internalOrphanenNodeData = $this->orphanNodeService->listInternalOrphanedNodeData($workspace, $dimensions, $type);
 
         $this->command(function (NodeInterface $node) {
             $this->output->outputLine('%s <comment>%s</comment> (%s) in <b>%s</b>', [$node->getIdentifier(), $node->getLabel(), $node->getNodeType(), $node->getPath()]);
@@ -131,7 +131,7 @@ class RebirthCommandController extends CommandController
             $this->outputLine('  <info>Done, node removed</info>');
         }, $workspace, $dimensions, $type, false);
 
-        $this->removeOrphanNodeData($orphanNodeData);
+        $this->removeOrphanNodeData($internalOrphanenNodeData);
 
         $this->outputLine('');
     }
