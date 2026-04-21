@@ -46,15 +46,18 @@ class RebirthCommandController extends CommandController
      *
      * @param string $workspace The workspace to use
      * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
-     * @param string $type The supertype of the nods to search
+     * @param string $type The supertype of the nodes to search
      */
-    public function listCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
+    public function listCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document', bool $includeInternalNodes = false): void
     {
         $nodes = $this->orphanNodeService->listOrphanNodes($workspace, $dimensions, $type);
-        $orphanNodeData = $this->orphanNodeService->listOrphanNodeData($workspace, $dimensions, $type);
+
+        if ($includeInternalNodes) {
+            $internalOrphanenNodesData = $this->orphanNodeService->listInternalOrphanedNodesData($workspace, $dimensions, $type);
+            $this->listOrphanNodesData($internalOrphanenNodesData);
+        }
 
         $this->listOrphanNodes($nodes);
-        $this->listOrphanNodesData($orphanNodeData);
         $this->outputLine('');
     }
 
@@ -100,7 +103,7 @@ class RebirthCommandController extends CommandController
      * List orphan documents for all user workspaces
      *
      * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
-     * @param string $type The supertype of the nods to search
+     * @param string $type The supertype of the nodes to search
      */
     public function listAllUserWorkspacesCommand(?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
     {
@@ -119,19 +122,19 @@ class RebirthCommandController extends CommandController
      *
      * @param string $workspace The workspace to use
      * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
-     * @param string $type The supertype of the nods to search
+     * @param string $type The supertype of the nodes to search
      */
     public function pruneAllCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
     {
-        $internalOrphanenNodeData = $this->orphanNodeService->listInternalOrphanedNodeData($workspace, $dimensions, $type);
-
         $this->command(function (NodeInterface $node) {
             $this->output->outputLine('%s <comment>%s</comment> (%s) in <b>%s</b>', [$node->getIdentifier(), $node->getLabel(), $node->getNodeType(), $node->getPath()]);
             $node->remove();
             $this->outputLine('  <info>Done, node removed</info>');
         }, $workspace, $dimensions, $type, false);
 
-        $this->removeOrphanNodeData($internalOrphanenNodeData);
+        $internalOrphanenNodesData = $this->orphanNodeService->listInternalOrphanedNodesData($workspace, $dimensions, $type);
+
+        $this->removeOrphanNodeData($internalOrphanenNodesData);
 
         $this->outputLine('');
     }
@@ -140,7 +143,7 @@ class RebirthCommandController extends CommandController
      * Prune orphan documents
      *
      * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
-     * @param string $type The supertype of the nods to search
+     * @param string $type The supertype of the nodes to search
      */
     public function pruneAllUserWorkspacesCommand(?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
     {
