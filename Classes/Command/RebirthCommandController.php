@@ -51,13 +51,13 @@ class RebirthCommandController extends CommandController
     public function listCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document', bool $includeInternalNodes = false): void
     {
         $nodes = $this->orphanNodeService->listOrphanNodes($workspace, $dimensions, $type);
+        $this->listOrphanNodes($nodes);
 
         if ($includeInternalNodes) {
             $internalOrphanenNodesData = $this->orphanNodeService->listInternalOrphanedNodesData($workspace, $dimensions, $type);
             $this->listOrphanNodesData($internalOrphanenNodesData);
         }
 
-        $this->listOrphanNodes($nodes);
         $this->outputLine('');
     }
 
@@ -105,14 +105,14 @@ class RebirthCommandController extends CommandController
      * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
      * @param string $type The supertype of the nodes to search
      */
-    public function listAllUserWorkspacesCommand(?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
+    public function listAllUserWorkspacesCommand(?string $dimensions = null, string $type = 'Neos.Neos:Document', bool $includeInternalNodes = false): void
     {
         $userWorkspaceNames = $this->getAllUserWorkspaceNames();
 
         if (!empty($userWorkspaceNames)) {
             foreach ($userWorkspaceNames as $userWorkspaceName) {
                 $this->outputLine('<b>Workspace:</b> %s', [$userWorkspaceName]);
-                $this->listCommand($userWorkspaceName, $dimensions, $type);
+                $this->listCommand($userWorkspaceName, $dimensions, $type, $includeInternalNodes);
             }
         }
     }
@@ -124,7 +124,7 @@ class RebirthCommandController extends CommandController
      * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
      * @param string $type The supertype of the nodes to search
      */
-    public function pruneAllCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
+    public function pruneAllCommand(string $workspace = 'live', ?string $dimensions = null, string $type = 'Neos.Neos:Document', bool $includeInternalNodes = false): void
     {
         $this->command(function (NodeInterface $node) {
             $this->output->outputLine('%s <comment>%s</comment> (%s) in <b>%s</b>', [$node->getIdentifier(), $node->getLabel(), $node->getNodeType(), $node->getPath()]);
@@ -132,9 +132,10 @@ class RebirthCommandController extends CommandController
             $this->outputLine('  <info>Done, node removed</info>');
         }, $workspace, $dimensions, $type, false);
 
-        $internalOrphanenNodesData = $this->orphanNodeService->listInternalOrphanedNodesData($workspace, $dimensions, $type);
-
-        $this->removeOrphanNodeData($internalOrphanenNodesData);
+        if ($includeInternalNodes) {
+            $internalOrphanenNodesData = $this->orphanNodeService->listInternalOrphanedNodesData($workspace, $dimensions, $type);
+            $this->removeOrphanNodeData($internalOrphanenNodesData);
+        }
 
         $this->outputLine('');
     }
@@ -145,14 +146,14 @@ class RebirthCommandController extends CommandController
      * @param string|null $dimensions The dimension combination as json representation, defaults to all dimensions
      * @param string $type The supertype of the nodes to search
      */
-    public function pruneAllUserWorkspacesCommand(?string $dimensions = null, string $type = 'Neos.Neos:Document'): void
+    public function pruneAllUserWorkspacesCommand(?string $dimensions = null, string $type = 'Neos.Neos:Document', bool $includeInternalNodes = false): void
     {
         $userWorkspaceNames = $this->getAllUserWorkspaceNames();
 
         if (!empty($userWorkspaceNames)) {
             foreach ($userWorkspaceNames as $userWorkspaceName) {
                 $this->outputLine('<b>Workspace:</b> %s', [$userWorkspaceName]);
-                $this->pruneAllCommand($userWorkspaceName, $dimensions, $type);
+                $this->pruneAllCommand($userWorkspaceName, $dimensions, $type, $includeInternalNodes);
             }
         }
     }
